@@ -73,6 +73,17 @@ class GameServer : INetEventListener
 
                 if (_users.ContainsKey(username))
                 {
+                    // Проверка: уже ли кто-то подключён с этим именем
+                    if (_authenticatedPeers.ContainsValue(username))
+                    {
+                        Console.WriteLine("Duplicate login attempt: " + username);
+                        var dupWriter = new NetDataWriter();
+                        dupWriter.Put((byte)3);  // Тип сообщения: ошибка логина
+                        dupWriter.Put("User already logged in");
+                        peer.Send(dupWriter, DeliveryMethod.ReliableOrdered);
+                        break;
+                    }
+
                     _authenticatedPeers[peer] = username;
                     Console.WriteLine("Login successful: " + username);
                 }

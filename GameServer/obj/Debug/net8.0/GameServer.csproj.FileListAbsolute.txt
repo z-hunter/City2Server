@@ -32,3 +32,4 @@ C:\Users\Michael\City2\GameServer\obj\Debug\net8.0\refint\GameServer.dll
 C:\Users\Michael\City2\GameServer\obj\Debug\net8.0\GameServer.pdb
 C:\Users\Michael\City2\GameServer\obj\Debug\net8.0\GameServer.genruntimeconfig.cache
 C:\Users\Michael\City2\GameServer\obj\Debug\net8.0\ref\GameServer.dll
+C:\Users\Michael\City2\GameServer\obj\Debug\net8.0\GameServer.sourcelink.json

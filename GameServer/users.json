@@ -1,10 +1,12 @@
 {
   "alice": {
+    "Username": null,
     "LastX": 10,
     "LastY": 20
   },
   "bob": {
-    "LastX": 5.5,
-    "LastY": 3.3
+    "Username": null,
+    "LastX": 10,
+    "LastY": 10
   }
 }

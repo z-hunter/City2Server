@@ -1,12 +1,12 @@
 {
   "alice": {
     "Username": null,
-    "LastX": 10,
-    "LastY": 20
+    "LastX": 1,
+    "LastY": 1
   },
   "bob": {
     "Username": null,
-    "LastX": 10,
-    "LastY": 10
+    "LastX": 1,
+    "LastY": 1
   }
 }

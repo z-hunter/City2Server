@@ -1,4 +1,4 @@
-﻿// GameServer.cs Ver. 0.0.1
+﻿// GameServer.cs Ver. 0.0.2
 using System;
 using System.Net;
 using System.Collections.Generic;
@@ -76,6 +76,7 @@ class GameServer : INetEventListener
             case 0: HandleLogin(reader, peer); break;
             case 1: HandleChat(reader, peer); break;
             case 2: HandlePosition(reader, peer); break;
+            case 8: HandleLogout(reader, peer); break;
         }
 
         reader.Recycle();
@@ -85,6 +86,15 @@ class GameServer : INetEventListener
     {
         string username = reader.GetString();
         Console.WriteLine("Login attempt: " + username);
+
+        if (string.IsNullOrWhiteSpace(username))
+        {
+            var writer = new NetDataWriter();
+            writer.Put((byte)3);
+            writer.Put("Username cannot be empty");
+            peer.Send(writer, DeliveryMethod.ReliableOrdered);
+            return;
+        }
 
         if (_users.ContainsKey(username))
         {
@@ -104,13 +114,11 @@ class GameServer : INetEventListener
 
             Console.WriteLine("Login successful: " + username);
 
-            // Send login success with token
             var loginSuccess = new NetDataWriter();
             loginSuccess.Put((byte)4);
             loginSuccess.Put(token);
             peer.Send(loginSuccess, DeliveryMethod.ReliableOrdered);
 
-            // Send existing players to the newly logged in player
             foreach (var s in _sessions.Values)
             {
                 if (s.Peer != peer)
@@ -124,7 +132,6 @@ class GameServer : INetEventListener
                 }
             }
 
-            // Notify others about the new player
             var newJoin = new NetDataWriter();
             newJoin.Put((byte)5);
             newJoin.Put(username);
@@ -189,7 +196,6 @@ class GameServer : INetEventListener
             _users[user].LastX = x;
             _users[user].LastY = y;
 
-            // Notify others
             foreach (var s in _sessions.Values)
             {
                 var move = new NetDataWriter();
@@ -206,6 +212,19 @@ class GameServer : INetEventListener
             err.Put((byte)3);
             err.Put("Unauthorized");
             peer.Send(err, DeliveryMethod.ReliableOrdered);
+        }
+    }
+
+    private void HandleLogout(NetPacketReader reader, NetPeer peer)
+    {
+        string token = reader.GetString();
+        var session = GetSessionByToken(token);
+
+        if (session != null)
+        {
+            Console.WriteLine("Logout: " + session.Username);
+            _sessions.Remove(peer);
+            BroadcastPlayerLeft(session.Username);
         }
     }
 

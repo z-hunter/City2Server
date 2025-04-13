@@ -33,3 +33,4 @@ C:\Users\Michael\City2\GameClient\obj\Debug\net8.0\GameClient.pdb
 C:\Users\Michael\City2\GameClient\obj\Debug\net8.0\GameClient.genruntimeconfig.cache
 C:\Users\Michael\City2\GameClient\obj\Debug\net8.0\ref\GameClient.dll
 C:\Users\Michael\City2\GameClient\obj\Debug\net8.0\GameClient.sourcelink.json
+C:\Users\Michael\City2\GameClient\bin\Debug\net8.0\config.json

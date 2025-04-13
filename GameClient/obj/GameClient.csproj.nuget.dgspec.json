@@ -10,11 +10,11 @@
         "projectUniqueName": "C:\\Users\\Michael\\City2\\GameClient\\GameClient.csproj",
         "projectName": "GameClient",
         "projectPath": "C:\\Users\\Michael\\City2\\GameClient\\GameClient.csproj",
-        "packagesPath": "C:\\Users\\Michael\\.nuget\\packages\\",
+        "packagesPath": "C:\\Users\\Mary\\.nuget\\packages\\",
         "outputPath": "C:\\Users\\Michael\\City2\\GameClient\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "C:\\Users\\Michael\\AppData\\Roaming\\NuGet\\NuGet.Config"
+          "C:\\Users\\Mary\\AppData\\Roaming\\NuGet\\NuGet.Config"
         ],
         "originalTargetFrameworks": [
           "net8.0"

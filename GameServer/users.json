@@ -1,7 +1,6 @@
 {
   "alice": {
     "Username": null,
-<<<<<<< HEAD
     "PasswordHash": "",
     "LastX": 10,
     "LastY": 20
@@ -11,14 +10,5 @@
     "PasswordHash": "",
     "LastX": 10,
     "LastY": 10
-=======
-    "LastX": 1,
-    "LastY": 1
-  },
-  "bob": {
-    "Username": null,
-    "LastX": 1,
-    "LastY": 1
->>>>>>> 5824f294d7d3c1b737f411dc2a13c5d1b9979d48
   }
 }

@@ -1,12 +1,12 @@
 {
   "alice": {
-    "Username": null,
+    "Username": "alice",
     "PasswordHash": "",
     "LastX": 10,
     "LastY": 20
   },
   "bob": {
-    "Username": null,
+    "Username": "bob",
     "PasswordHash": "",
     "LastX": 10,
     "LastY": 10

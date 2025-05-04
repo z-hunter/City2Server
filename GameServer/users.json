@@ -1,11 +1,13 @@
 {
   "alice": {
     "Username": null,
+    "PasswordHash": "",
     "LastX": 10,
     "LastY": 20
   },
   "bob": {
     "Username": null,
+    "PasswordHash": "",
     "LastX": 10,
     "LastY": 10
   }

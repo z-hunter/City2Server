@@ -1,271 +1,310 @@
-﻿// GameServer.cs Ver. 0.0.1
+﻿// GameServer.cs Ver. 0.0.5 (optional plain text passwords)
 using System;
 using System.Net;
 using System.Collections.Generic;
 using LiteNetLib;
 using LiteNetLib.Utils;
 using System.IO;
+using System.Security.Cryptography;
+using System.Text;
 
-class GameServer : INetEventListener
-{
-    private NetManager _server;
-    private Dictionary<NetPeer, PlayerSession> _sessions = new();
-    private Dictionary<string, GamePlayer> _users = new();
-    private const string UserDataFile = "users.json";
-    private const int ServerPort = 9050;
+class GameServer : INetEventListener {
+   private NetManager _server;
+   private Dictionary<NetPeer, PlayerSession> _sessions = new();
+   private Dictionary<string, GamePlayer> _users = new();
+   private const string UserDataFile = "users.json";
+   private const int ServerPort = 9050;
+   private const bool AutoRegisterUnknownUsers = false; // <- флаг авто-регистрации
+   private const bool UseHashedPasswords = false;       // <- флаг хэширования паролей
 
-    public GameServer()
-    {
-        _server = new NetManager(this);
-        LoadUserData();
-    }
+   public GameServer() {
+	  _server = new NetManager(this);
+	  LoadUserData();
+   }
 
-    public void Start()
-    {
-        _server.Start(ServerPort);
-        Console.WriteLine($"Server started on port {ServerPort}");
-    }
+   public void Start() {
+	  _server.Start(ServerPort);
+	  Console.WriteLine($"Server started on port {ServerPort}");
+   }
 
-    public void PollEvents()
-    {
-        _server.PollEvents();
-    }
+   public void PollEvents() {
+	  _server.PollEvents();
+   }
 
-    public void Stop()
-    {
-        SaveUserData();
-        _server.Stop();
-    }
+   public void Stop() {
+	  SaveUserData();
+	  _server.Stop();
+   }
 
-    private void LoadUserData()
-    {
-        if (File.Exists(UserDataFile))
-        {
-            string json = File.ReadAllText(UserDataFile);
-            _users = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, GamePlayer>>(json) ?? new();
-        }
-    }
+   private void LoadUserData() {
+	  if (File.Exists(UserDataFile)) {
+		 string json = File.ReadAllText(UserDataFile);
+		 _users = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, GamePlayer>>(json) ?? new();
+	  }
+   }
 
-    private void SaveUserData()
-    {
-        string json = System.Text.Json.JsonSerializer.Serialize(_users, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
-        File.WriteAllText(UserDataFile, json);
-    }
+   private void SaveUserData() {
+	  string json = System.Text.Json.JsonSerializer.Serialize(_users, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+	  File.WriteAllText(UserDataFile, json);
+   }
 
-    public void OnPeerConnected(NetPeer peer)
-    {
-        Console.WriteLine("Client connected: " + peer.Address + ":" + peer.Port);
-    }
+   public void OnPeerConnected(NetPeer peer) {
+	  Console.WriteLine("Client connected: " + peer.Address + ":" + peer.Port);
+   }
 
-    public void OnPeerDisconnected(NetPeer peer, DisconnectInfo disconnectInfo)
-    {
-        Console.WriteLine("Client disconnected: " + peer.Address + ":" + peer.Port);
-        if (_sessions.TryGetValue(peer, out var session))
-        {
-            BroadcastPlayerLeft(session.Username);
-            _sessions.Remove(peer);
-        }
-    }
+   public void OnPeerDisconnected(NetPeer peer, DisconnectInfo disconnectInfo) {
+	  Console.WriteLine("Client disconnected: " + peer.Address + ":" + peer.Port);
+	  if (_sessions.TryGetValue(peer, out var session)) {
+		 BroadcastPlayerLeft(session.Username);
+		 _sessions.Remove(peer);
+	  }
+   }
 
-    public void OnNetworkReceive(NetPeer peer, NetPacketReader reader, byte channelNumber, DeliveryMethod deliveryMethod)
-    {
-        byte msgType = reader.GetByte();
+   public void OnNetworkReceive(NetPeer peer, NetPacketReader reader, byte channelNumber, DeliveryMethod deliveryMethod) {
+	  byte msgType = reader.GetByte();
 
-        switch (msgType)
-        {
-            case 0: HandleLogin(reader, peer); break;
-            case 1: HandleChat(reader, peer); break;
-            case 2: HandlePosition(reader, peer); break;
-        }
+	  switch (msgType) {
+		 case 0: HandleLogin(reader, peer); break;
+		 case 1: HandleChat(reader, peer); break;
+		 case 2: HandlePosition(reader, peer); break;
+		 case 8: HandleLogout(reader, peer); break;
+		 case 9: HandleRegister(reader, peer); break;
+	  }
 
-        reader.Recycle();
-    }
+	  reader.Recycle();
+   }
 
-    private void HandleLogin(NetPacketReader reader, NetPeer peer)
-    {
-        string username = reader.GetString();
-        Console.WriteLine("Login attempt: " + username);
+   private void HandleRegister(NetPacketReader reader, NetPeer peer) {
+	  string username = reader.GetString();
+	  string password = reader.GetString();
 
-        if (_users.ContainsKey(username))
-        {
-            if (IsUserLoggedIn(username))
-            {
-                Console.WriteLine("Duplicate login attempt: " + username);
-                var dupWriter = new NetDataWriter();
-                dupWriter.Put((byte)3);
-                dupWriter.Put("User already logged in");
-                peer.Send(dupWriter, DeliveryMethod.ReliableOrdered);
-                return;
-            }
+	  if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password)) {
+		 var writer = new NetDataWriter();
+		 writer.Put((byte)3);
+		 writer.Put("Username and password cannot be empty");
+		 peer.Send(writer, DeliveryMethod.ReliableOrdered);
+		 return;
+	  }
 
-            string token = Guid.NewGuid().ToString();
-            var session = new PlayerSession(username, token, peer);
-            _sessions[peer] = session;
+	  if (_users.ContainsKey(username)) {
+		 var writer = new NetDataWriter();
+		 writer.Put((byte)3);
+		 writer.Put("Username already exists");
+		 peer.Send(writer, DeliveryMethod.ReliableOrdered);
+		 return;
+	  }
 
-            Console.WriteLine("Login successful: " + username);
+	  string hash = HashPassword(password);
+	  _users[username] = new GamePlayer { Username = username, PasswordHash = hash };
+	  SaveUserData();
 
-            // Send login success with token
-            var loginSuccess = new NetDataWriter();
-            loginSuccess.Put((byte)4);
-            loginSuccess.Put(token);
-            peer.Send(loginSuccess, DeliveryMethod.ReliableOrdered);
+	  var success = new NetDataWriter();
+	  success.Put((byte)4);
+	  success.Put("Registration successful");
+	  peer.Send(success, DeliveryMethod.ReliableOrdered);
 
-            // Send existing players to the newly logged in player
-            foreach (var s in _sessions.Values)
-            {
-                if (s.Peer != peer)
-                {
-                    var existing = new NetDataWriter();
-                    existing.Put((byte)5);
-                    existing.Put(s.Username);
-                    existing.Put(_users[s.Username].LastX);
-                    existing.Put(_users[s.Username].LastY);
-                    peer.Send(existing, DeliveryMethod.ReliableOrdered);
-                }
-            }
+	  Console.WriteLine("New user registered: " + username);
+   }
 
-            // Notify others about the new player
-            var newJoin = new NetDataWriter();
-            newJoin.Put((byte)5);
-            newJoin.Put(username);
-            newJoin.Put(_users[username].LastX);
-            newJoin.Put(_users[username].LastY);
+   private void HandleLogin(NetPacketReader reader, NetPeer peer) {
+	  string username = reader.GetString();
+	  string password = reader.GetString();
+	  Console.WriteLine("Login attempt: " + username);
 
-            foreach (var s in _sessions.Values)
-            {
-                if (s.Peer != peer)
-                    s.Peer.Send(newJoin, DeliveryMethod.ReliableOrdered);
-            }
-        }
-        else
-        {
-            Console.WriteLine("Login failed: " + username);
-            var writer = new NetDataWriter();
-            writer.Put((byte)3);
-            writer.Put("Invalid login");
-            peer.Send(writer, DeliveryMethod.ReliableOrdered);
-        }
-    }
+	  if (!_users.ContainsKey(username)) {
+		 if (AutoRegisterUnknownUsers) {
+			string hash = HashPassword(password);
+			_users[username] = new GamePlayer { Username = username, PasswordHash = hash };
+			SaveUserData();
+			Console.WriteLine("Auto-registered new user: " + username);
+		 }
+		 else {
+			var writer = new NetDataWriter();
+			writer.Put((byte)3);
+			writer.Put("User not found");
+			peer.Send(writer, DeliveryMethod.ReliableOrdered);
+			return;
+		 }
+	  }
 
-    private void HandleChat(NetPacketReader reader, NetPeer peer)
-    {
-        string token = reader.GetString();
-        string msg = reader.GetString();
-        var session = GetSessionByToken(token);
+	  if (_users[username].PasswordHash != HashPassword(password)) {
+		 var writer = new NetDataWriter();
+		 writer.Put((byte)3);
+		 writer.Put("Invalid password");
+		 peer.Send(writer, DeliveryMethod.ReliableOrdered);
+		 return;
+	  }
 
-        if (session != null)
-        {
-            Console.WriteLine(session.Username + " says: " + msg);
+	  if (IsUserLoggedIn(username)) {
+		 Console.WriteLine("Duplicate login attempt: " + username);
+		 var dupWriter = new NetDataWriter();
+		 dupWriter.Put((byte)3);
+		 dupWriter.Put("User already logged in");
+		 peer.Send(dupWriter, DeliveryMethod.ReliableOrdered);
+		 return;
+	  }
 
-            foreach (var s in _sessions.Values)
-            {
-                var reply = new NetDataWriter();
-                reply.Put((byte)1);
-                reply.Put(session.Username + ": " + msg);
-                s.Peer.Send(reply, DeliveryMethod.ReliableOrdered);
-            }
-        }
-        else
-        {
-            var err = new NetDataWriter();
-            err.Put((byte)3);
-            err.Put("Unauthorized");
-            peer.Send(err, DeliveryMethod.ReliableOrdered);
-        }
-    }
+	  string token = Guid.NewGuid().ToString();
+	  var session = new PlayerSession(username, token, peer);
+	  _sessions[peer] = session;
 
-    private void HandlePosition(NetPacketReader reader, NetPeer peer)
-    {
-        string token = reader.GetString();
-        float x = reader.GetFloat();
-        float y = reader.GetFloat();
-        var session = GetSessionByToken(token);
+	  Console.WriteLine("Login successful: " + username);
 
-        if (session != null)
-        {
-            string user = session.Username;
-            Console.WriteLine(user + " moved to x=" + x + ", y=" + y);
+	  var loginSuccess = new NetDataWriter();
+	  loginSuccess.Put((byte)4);
+	  loginSuccess.Put(token);
+	  peer.Send(loginSuccess, DeliveryMethod.ReliableOrdered);
 
-            _users[user].LastX = x;
-            _users[user].LastY = y;
+	  foreach (var s in _sessions.Values) {
+		 if (s.Peer != peer) {
+			var existing = new NetDataWriter();
+			existing.Put((byte)5);
+			existing.Put(s.Username);
+			existing.Put(_users[s.Username].LastX);
+			existing.Put(_users[s.Username].LastY);
+			peer.Send(existing, DeliveryMethod.ReliableOrdered);
+		 }
+	  }
 
-            // Notify others
-            foreach (var s in _sessions.Values)
-            {
-                var move = new NetDataWriter();
-                move.Put((byte)6);
-                move.Put(user);
-                move.Put(x);
-                move.Put(y);
-                s.Peer.Send(move, DeliveryMethod.Sequenced);
-            }
-        }
-        else
-        {
-            var err = new NetDataWriter();
-            err.Put((byte)3);
-            err.Put("Unauthorized");
-            peer.Send(err, DeliveryMethod.ReliableOrdered);
-        }
-    }
+	  var newJoin = new NetDataWriter();
+	  newJoin.Put((byte)5);
+	  newJoin.Put(username);
+	  newJoin.Put(_users[username].LastX);
+	  newJoin.Put(_users[username].LastY);
 
-    private void BroadcastPlayerLeft(string username)
-    {
-        var leave = new NetDataWriter();
-        leave.Put((byte)7);
-        leave.Put(username);
+	  foreach (var s in _sessions.Values) {
+		 if (s.Peer != peer)
+			s.Peer.Send(newJoin, DeliveryMethod.ReliableOrdered);
+	  }
+   }
 
-        foreach (var s in _sessions.Values)
-        {
-            s.Peer.Send(leave, DeliveryMethod.ReliableOrdered);
-        }
-    }
+   private static string HashPassword(string password) {
+	  if (!UseHashedPasswords)
+		 return password;
 
-    private PlayerSession? GetSessionByToken(string token)
-    {
-        foreach (var session in _sessions.Values)
-        {
-            if (session.Token == token)
-                return session;
-        }
-        return null;
-    }
+	  using var sha256 = SHA256.Create();
+	  byte[] bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(password));
+	  return Convert.ToBase64String(bytes);
+   }
 
-    private bool IsUserLoggedIn(string username)
-    {
-        foreach (var session in _sessions.Values)
-        {
-            if (session.Username == username)
-                return true;
-        }
-        return false;
-    }
+   private void HandleChat(NetPacketReader reader, NetPeer peer) {
+	  string token = reader.GetString();
+	  string msg = reader.GetString();
+	  var session = GetSessionByToken(token);
 
-    public void OnConnectionRequest(ConnectionRequest request)
-    {
-        request.AcceptIfKey("game_app");
-    }
+	  if (session != null) {
+		 Console.WriteLine(session.Username + " says: " + msg);
 
-    public void OnNetworkError(IPEndPoint endPoint, System.Net.Sockets.SocketError socketErrorCode)
-    {
-        Console.WriteLine("Network error: " + socketErrorCode);
-    }
+		 foreach (var s in _sessions.Values) {
+			var reply = new NetDataWriter();
+			reply.Put((byte)1);
+			reply.Put(session.Username + ": " + msg);
+			s.Peer.Send(reply, DeliveryMethod.ReliableOrdered);
+		 }
+	  }
+	  else {
+		 var err = new NetDataWriter();
+		 err.Put((byte)3);
+		 err.Put("Unauthorized");
+		 peer.Send(err, DeliveryMethod.ReliableOrdered);
+	  }
+   }
 
-    public void OnNetworkReceiveUnconnected(IPEndPoint remoteEndPoint, NetPacketReader reader, UnconnectedMessageType messageType) { }
-    public void OnNetworkLatencyUpdate(NetPeer peer, int latency) { }
+   private void HandlePosition(NetPacketReader reader, NetPeer peer) {
+	  string token = reader.GetString();
+	  float x = reader.GetFloat();
+	  float y = reader.GetFloat();
+	  var session = GetSessionByToken(token);
 
-    static void Main()
-    {
-        GameServer server = new GameServer();
-        server.Start();
+	  if (session != null) {
+		 string user = session.Username;
+		 Console.WriteLine(user + " moved to x=" + x + ", y=" + y);
 
-        Console.WriteLine("Press Enter to quit.");
-        while (!Console.KeyAvailable)
-        {
-            server.PollEvents();
-            System.Threading.Thread.Sleep(15);
-        }
+		 _users[user].LastX = x;
+		 _users[user].LastY = y;
 
-        server.Stop();
-    }
+		 foreach (var s in _sessions.Values) {
+			var move = new NetDataWriter();
+			move.Put((byte)6);
+			move.Put(user);
+			move.Put(x);
+			move.Put(y);
+			s.Peer.Send(move, DeliveryMethod.Sequenced);
+		 }
+	  }
+	  else {
+		 var err = new NetDataWriter();
+		 err.Put((byte)3);
+		 err.Put("Unauthorized");
+		 peer.Send(err, DeliveryMethod.ReliableOrdered);
+	  }
+   }
+
+   private void HandleLogout(NetPacketReader reader, NetPeer peer) {
+	  string token = reader.GetString();
+	  var session = GetSessionByToken(token);
+
+	  if (session != null) {
+		 Console.WriteLine("Logout: " + session.Username);
+		 _sessions.Remove(peer);
+		 BroadcastPlayerLeft(session.Username);
+	  }
+   }
+
+   private void BroadcastPlayerLeft(string username) {
+	  var leave = new NetDataWriter();
+	  leave.Put((byte)7);
+	  leave.Put(username);
+
+	  foreach (var s in _sessions.Values) {
+		 s.Peer.Send(leave, DeliveryMethod.ReliableOrdered);
+	  }
+   }
+
+   private PlayerSession? GetSessionByToken(string token) {
+	  foreach (var session in _sessions.Values) {
+		 if (session.Token == token)
+			return session;
+	  }
+	  return null;
+   }
+
+   private bool IsUserLoggedIn(string username) {
+	  foreach (var session in _sessions.Values) {
+		 if (session.Username == username)
+			return true;
+	  }
+	  return false;
+   }
+
+   public void OnConnectionRequest(ConnectionRequest request) {
+	  request.AcceptIfKey("game_app");
+   }
+
+   public void OnNetworkError(IPEndPoint endPoint, System.Net.Sockets.SocketError socketErrorCode) {
+	  Console.WriteLine("Network error: " + socketErrorCode);
+   }
+
+   public void OnNetworkReceiveUnconnected(IPEndPoint remoteEndPoint, NetPacketReader reader, UnconnectedMessageType messageType) { }
+   public void OnNetworkLatencyUpdate(NetPeer peer, int latency) { }
+
+   static void Main() {
+	  GameServer server = new GameServer();
+	  server.Start();
+
+	  Console.WriteLine("Press Enter to quit.");
+	  while (!Console.KeyAvailable) {
+		 server.PollEvents();
+		 System.Threading.Thread.Sleep(15);
+	  }
+
+	  server.Stop();
+   }
+}
+
+public class GamePlayer {
+   public string Username { get; set; } = "";
+   public string PasswordHash { get; set; } = "";
+   public float LastX { get; set; } = 0;
+   public float LastY { get; set; } = 0;
 }

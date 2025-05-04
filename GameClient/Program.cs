@@ -1,226 +1,219 @@
-﻿using System;
-using System.Net;
-using System.Net.Sockets;
-using System.Threading;
+﻿// Program.cs (GameClient)
+using System;
 using LiteNetLib;
 using LiteNetLib.Utils;
-namespace GameClientNamespace;
+using System.IO;
+using System.Threading;
+using System.Text.Json;
 
-class GameClient : INetEventListener
-{
-    private NetManager _client;
-    private NetPeer _serverPeer;
-    private string _username;
-    private string _token;
-    private bool _isRunning;
+namespace GameClientNamespace {
+   public class Config {
+	  public string ServerAddress { get; set; } = "57.128.228.75"; // default dev server
+	  public int ServerPort { get; set; } = 9050;
 
-    public GameClient()
-    {
-        _client = new NetManager(this);
-    }
+	  public static Config Load(string filePath) {
+		 try {
+			string json = File.ReadAllText(filePath);
+			var options = new JsonSerializerOptions {
+			   PropertyNameCaseInsensitive = true
+			};
+			return JsonSerializer.Deserialize<Config>(json, options) ?? new Config();
+		 }
+		 catch (Exception e) {
+			Console.WriteLine("Error loading config: " + e.Message);
+			return new Config();
+		 }
+	  }
+   }
 
-    public void Start(string ipAddress)
-    {
-        _client.Start();
-        _serverPeer = _client.Connect(ipAddress, 9050, "game_app");
-        Console.WriteLine("Connecting to server...");
-    }
+   class GameClient : INetEventListener {
+	  private NetManager _client;
+	  private NetPeer _server;
+	  private string? _token;
+	  private string _username = "";
+	  private int _lastLatency = -1;
+	  private string _serverIp;
+	  private int _serverPort;
+	  private bool _connected = false;
+	  private bool _shouldReconnect = true;
 
-    public void PollEvents()
-    {
-        _client.PollEvents();
-    }
+	  public GameClient(string serverIp, int serverPort) {
+		 _serverIp = serverIp;
+		 _serverPort = serverPort;
+		 _client = new NetManager(this);
+		 _client.Start();
+	  }
 
-    public void Stop()
-    {
-        _client.Stop();
-    }
+	  public void Connect() {
+		 Console.WriteLine("Attempting to connect...");
+		 _client.Connect(_serverIp, _serverPort, "game_app");
+	  }
 
-    // This method handles all incoming server messages
-    public void OnNetworkReceive(NetPeer peer, NetPacketReader reader, byte channelNumber, DeliveryMethod deliveryMethod)
-    {
-        byte msgType = reader.GetByte();
+	  public void PollEvents() {
+		 _client.PollEvents();
+	  }
 
-        switch (msgType)
-        {
-            case 4: HandleLoginSuccess(reader, peer); break;
-            case 1: HandleChat(reader); break;
-            case 2: HandlePositionUpdate(reader); break;
-            case 5: HandlePlayerList(reader); break;
-            case 6: HandlePositionBroadcast(reader); break;
-            case 7: HandlePlayerExit(reader); break;
-        }
+	  public void OnPeerConnected(NetPeer peer) {
+		 Console.WriteLine("Connected to server");
+		 _server = peer;
+		 _connected = true;
+	  }
 
-        reader.Recycle();
-    }
+	  public void OnPeerDisconnected(NetPeer peer, DisconnectInfo disconnectInfo) {
+		 Console.WriteLine("Disconnected: " + disconnectInfo.Reason);
+		 _connected = false;
+	  }
 
-    private void HandleLoginSuccess(NetPacketReader reader, NetPeer peer)
-    {
-        _token = reader.GetString();
-        Console.WriteLine("Login successful, token: " + _token);
-    }
+	  public void OnNetworkError(System.Net.IPEndPoint endPoint, System.Net.Sockets.SocketError socketErrorCode) {
+		 Console.WriteLine("Network error: " + socketErrorCode);
+	  }
 
-    private void HandleChat(NetPacketReader reader)
-    {
-        string message = reader.GetString();
-        Console.WriteLine("Chat message received: " + message);
-    }
+	  public void OnNetworkReceive(NetPeer peer, NetPacketReader reader, byte channelNumber, DeliveryMethod deliveryMethod) {
+		 byte msgType = reader.GetByte();
+		 switch (msgType) {
+			case 1:
+			   string msg = reader.GetString();
+			   Console.WriteLine(msg);
+			   break;
+			case 3:
+			   string err = reader.GetString();
+			   Console.WriteLine("Error: " + err);
+			   break;
+			case 4:
+			   _token = reader.GetString();
+			   Console.WriteLine("Login successful. Token: " + _token);
+			   break;
+			case 5:
+			   string joinUser = reader.GetString();
+			   float x = reader.GetFloat();
+			   float y = reader.GetFloat();
+			   Console.WriteLine($"{joinUser} joined at ({x}, {y})");
+			   break;
+			case 6:
+			   string moveUser = reader.GetString();
+			   float mx = reader.GetFloat();
+			   float my = reader.GetFloat();
+			   Console.WriteLine($"{moveUser} moved to ({mx}, {my})");
+			   break;
+			case 7:
+			   string leftUser = reader.GetString();
+			   Console.WriteLine($"{leftUser} has left the game.");
+			   break;
+		 }
+		 reader.Recycle();
+	  }
 
-    private void HandlePositionUpdate(NetPacketReader reader)
-    {
-        float x = reader.GetFloat();
-        float y = reader.GetFloat();
-        Console.WriteLine($"Received position update: x={x}, y={y}");
-    }
+	  public void OnNetworkReceiveUnconnected(System.Net.IPEndPoint remoteEndPoint, NetPacketReader reader, UnconnectedMessageType messageType) { }
 
-    private void HandlePlayerList(NetPacketReader reader)
-    {
-        Console.WriteLine("Received player list:");
-        while (reader.AvailableBytes > 0)
-        {
-            string username = reader.GetString();
-            float x = reader.GetFloat();
-            float y = reader.GetFloat();
-            Console.WriteLine($"Player {username} at position x={x}, y={y}");
-        }
-    }
+	  public void OnConnectionRequest(ConnectionRequest request) {
+		 request.AcceptIfKey("game_app");
+	  }
 
-    private void HandlePositionBroadcast(NetPacketReader reader)
-    {
-        string username = reader.GetString();
-        float x = reader.GetFloat();
-        float y = reader.GetFloat();
-        Console.WriteLine($"Position of player {username} updated: x={x}, y={y}");
-    }
+	  public void OnNetworkLatencyUpdate(NetPeer peer, int latency) {
+		 if (_lastLatency == -1 || Math.Abs(latency - _lastLatency) >= 30) {
+			_lastLatency = latency;
+			Console.WriteLine($"Latency: {latency} ms");
+		 }
+	  }
 
-    private void HandlePlayerExit(NetPacketReader reader)
-    {
-        string username = reader.GetString();
-        Console.WriteLine($"Player {username} has disconnected");
-    }
+	  public void Login(string username) {
+		 _username = username;
+		 var writer = new NetDataWriter();
+		 writer.Put((byte)0);
+		 writer.Put(username);
+		 _server.Send(writer, DeliveryMethod.ReliableOrdered);
+	  }
 
-    public void OnPeerConnected(NetPeer peer)
-    {
-        Console.WriteLine("Connected to server.");
-    }
+	  public void Logout() {
+		 if (_token == null) return;
+		 var writer = new NetDataWriter();
+		 writer.Put((byte)8);
+		 writer.Put(_token);
+		 _server.Send(writer, DeliveryMethod.ReliableOrdered);
+		 Console.WriteLine("Logged out.");
+		 _token = null;
+	  }
 
-    public void OnPeerDisconnected(NetPeer peer, DisconnectInfo disconnectInfo)
-    {
-        Console.WriteLine("Disconnected from server.");
-    }
+	  public void SendChat(string message) {
+		 if (_token == null) return;
+		 var writer = new NetDataWriter();
+		 writer.Put((byte)1);
+		 writer.Put(_token);
+		 writer.Put(message);
+		 _server.Send(writer, DeliveryMethod.ReliableOrdered);
+	  }
 
-    public void OnConnectionRequest(ConnectionRequest request)
-    {
-        request.AcceptIfKey("game_app");
-    }
+	  public void SendPosition(float x, float y) {
+		 if (_token == null) return;
+		 var writer = new NetDataWriter();
+		 writer.Put((byte)2);
+		 writer.Put(_token);
+		 writer.Put(x);
+		 writer.Put(y);
+		 _server.Send(writer, DeliveryMethod.Sequenced);
+	  }
 
-    public void OnNetworkError(IPEndPoint endPoint, System.Net.Sockets.SocketError socketErrorCode)
-    {
-        Console.WriteLine("Network error: " + socketErrorCode);
-    }
+	  public void RunEventLoop() {
+		 while (_shouldReconnect) {
+			PollEvents();
 
-    public void OnNetworkLatencyUpdate(NetPeer peer, int latency) { }
-    public void OnNetworkReceiveUnconnected(IPEndPoint remoteEndPoint, NetPacketReader reader, UnconnectedMessageType messageType) { }
+			if (!_connected) {
+			   Connect();
+			   Thread.Sleep(2000); // wait before retrying
+			}
 
-    private void Login(string username)
-    {
-        var writer = new NetDataWriter();
-        writer.Put((byte)0);  // Message type for login
-        writer.Put(username);
-        _serverPeer.Send(writer, DeliveryMethod.ReliableOrdered);
-        Console.WriteLine("Login request sent for: " + username);
-    }
+			Thread.Sleep(15);
+		 }
+	  }
+   }
 
-    private void SendChatMessage(string message)
-    {
-        var writer = new NetDataWriter();
-        writer.Put((byte)1);  // Message type for chat
-        writer.Put(_token);
-        writer.Put(message);
-        _serverPeer.Send(writer, DeliveryMethod.ReliableOrdered);
-    }
+   class Program {
 
-    private void UpdatePosition(float x, float y)
-    {
-        var writer = new NetDataWriter();
-        writer.Put((byte)2);  // Message type for position update
-        writer.Put(_token);
-        writer.Put(x);
-        writer.Put(y);
-        _serverPeer.Send(writer, DeliveryMethod.ReliableOrdered);
-    }
 
-    static void Main(string[] args)
-    {
-        GameClient client = new GameClient();
-        client.Start("127.0.0.1");
+	  static void Main(string[] args) {
+		 string configPath = "config.json";
+		 Config config = Config.Load(configPath);
 
-        Console.WriteLine("Press Enter to quit.");
-        bool isRunning = true;
+		 Console.WriteLine($"Loaded config: {config.ServerAddress}:{config.ServerPort}");  // <-- добавь это
 
-        // Run polling in a separate task (background thread)
-        Task.Run(() =>
-        {
-            while (isRunning)
-            {
-                client.PollEvents();
-                Thread.Sleep(15);
-            }
-        });
+		 var client = new GameClient(config.ServerAddress, config.ServerPort);
+		 var clientThread = new Thread(client.RunEventLoop);
+		 clientThread.Start();
 
-        while (isRunning)
-        {
-            Console.WriteLine("Enter a command (login <username>, pos <x y>, chat <message>, quit): ");
-            string command = Console.ReadLine();
+		 Console.WriteLine("Type 'login <username>', 'logout', 'chat <message>', or 'pos <x> <y>' to interact.");
 
-            var commandParts = command.Split(' ');
-            switch (commandParts[0])
-            {
-                case "login":
-                    if (commandParts.Length > 1)
-                    {
-                        string username = commandParts[1];
-                        client.Login(username);
-                    }
-                    else
-                    {
-                        Console.WriteLine("Usage: login <username>");
-                    }
-                    break;
+		 while (true) {
+			string? input = Console.ReadLine();
+			if (input == null) continue;
 
-                case "pos":
-                    if (commandParts.Length == 3 && float.TryParse(commandParts[1], out float x) && float.TryParse(commandParts[2], out float y))
-                    {
-                        client.UpdatePosition(x, y);
-                    }
-                    else
-                    {
-                        Console.WriteLine("Usage: pos <x> <y>");
-                    }
-                    break;
+			var parts = input.Split(' ', 2);
+			string cmd = parts[0].ToLower();
 
-                case "chat":
-                    if (commandParts.Length > 1)
-                    {
-                        string message = string.Join(" ", commandParts, 1, commandParts.Length - 1);
-                        client.SendChatMessage(message);
-                    }
-                    else
-                    {
-                        Console.WriteLine("Usage: chat <message>");
-                    }
-                    break;
-
-                case "quit":
-                    isRunning = false;
-                    break;
-
-                default:
-                    Console.WriteLine("Unknown command.");
-                    break;
-            }
-        }
-
-        client.Stop();
-    }
+			switch (cmd) {
+			   case "login":
+				  if (parts.Length > 1) client.Login(parts[1]);
+				  else Console.WriteLine("Usage: login <username>");
+				  break;
+			   case "logout":
+				  client.Logout();
+				  break;
+			   case "chat":
+				  if (parts.Length > 1) client.SendChat(parts[1]);
+				  else Console.WriteLine("Usage: chat <message>");
+				  break;
+			   case "pos":
+				  var coords = parts.Length > 1 ? parts[1].Split(' ') : Array.Empty<string>();
+				  if (coords.Length == 2 &&
+					  float.TryParse(coords[0], out float x) &&
+					  float.TryParse(coords[1], out float y)) {
+					 client.SendPosition(x, y);
+				  }
+				  else {
+					 Console.WriteLine("Usage: pos <x> <y>");
+				  }
+				  break;
+			}
+		 }
+	  }
+   }
 }

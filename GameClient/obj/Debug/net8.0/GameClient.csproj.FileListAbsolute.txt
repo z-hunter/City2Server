@@ -33,6 +33,7 @@ C:\Users\Michael\City2\GameClient\obj\Debug\net8.0\GameClient.pdb
 C:\Users\Michael\City2\GameClient\obj\Debug\net8.0\GameClient.genruntimeconfig.cache
 C:\Users\Michael\City2\GameClient\obj\Debug\net8.0\ref\GameClient.dll
 C:\Users\Michael\City2\GameClient\obj\Debug\net8.0\GameClient.sourcelink.json
+<<<<<<< HEAD
 D:\Dev.dir\MySRC.dat\City2Server\GameClient\bin\Debug\net8.0\GameClient.exe
 D:\Dev.dir\MySRC.dat\City2Server\GameClient\bin\Debug\net8.0\GameClient.deps.json
 D:\Dev.dir\MySRC.dat\City2Server\GameClient\bin\Debug\net8.0\GameClient.runtimeconfig.json
@@ -51,3 +52,6 @@ D:\Dev.dir\MySRC.dat\City2Server\GameClient\obj\Debug\net8.0\refint\GameClient.d
 D:\Dev.dir\MySRC.dat\City2Server\GameClient\obj\Debug\net8.0\GameClient.pdb
 D:\Dev.dir\MySRC.dat\City2Server\GameClient\obj\Debug\net8.0\GameClient.genruntimeconfig.cache
 D:\Dev.dir\MySRC.dat\City2Server\GameClient\obj\Debug\net8.0\ref\GameClient.dll
+=======
+C:\Users\Michael\City2\GameClient\bin\Debug\net8.0\config.json
+>>>>>>> 5824f294d7d3c1b737f411dc2a13c5d1b9979d48

@@ -1,0 +1,21 @@
+root = true
+
+[*.cs]
+# Настройки форматирования C#
+csharp_new_line_before_open_brace = false
+csharp_new_line_before_else = true
+csharp_new_line_before_catch = true
+csharp_new_line_before_finally = true
+csharp_new_line_before_members_in_object_initializers = true
+csharp_new_line_before_members_in_anonymous_types = true
+csharp_new_line_between_query_expression_clauses = true
+
+# Отступы
+indent_size = 3
+indent_style = tab
+
+# Конец строки
+end_of_line = crlf
+
+# Кодировка
+charset = utf-8-bom 

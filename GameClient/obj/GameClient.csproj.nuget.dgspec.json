@@ -9,6 +9,7 @@
       "restore": {
         "projectUniqueName": "D:\\Dev.dir\\MySRC.dat\\City2Server\\GameClient\\GameClient.csproj",
         "projectName": "GameClient",
+<<<<<<< HEAD
         "projectPath": "D:\\Dev.dir\\MySRC.dat\\City2Server\\GameClient\\GameClient.csproj",
         "packagesPath": "C:\\Users\\Professional\\.nuget\\packages\\",
         "outputPath": "D:\\Dev.dir\\MySRC.dat\\City2Server\\GameClient\\obj\\",
@@ -16,6 +17,14 @@
         "configFilePaths": [
           "C:\\Users\\Professional\\AppData\\Roaming\\NuGet\\NuGet.Config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+=======
+        "projectPath": "C:\\Users\\Michael\\City2\\GameClient\\GameClient.csproj",
+        "packagesPath": "C:\\Users\\Mary\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\Michael\\City2\\GameClient\\obj\\",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "C:\\Users\\Mary\\AppData\\Roaming\\NuGet\\NuGet.Config"
+>>>>>>> 5824f294d7d3c1b737f411dc2a13c5d1b9979d48
         ],
         "originalTargetFrameworks": [
           "net8.0"

@@ -108,7 +108,11 @@ class GameServer : INetEventListener {
 
    private void HandleLogin(NetPacketReader reader, NetPeer peer) {
 	  string username = reader.GetString();
-	  string password = reader.GetString();
+	  string password = reader.AvailableBytes > 0 ? reader.GetString() : "";
+
+	  Console.WriteLine($"Login attempt: {username}");
+
+ 
 	  Console.WriteLine("Login attempt: " + username);
 
 	  if (!_users.ContainsKey(username)) {
